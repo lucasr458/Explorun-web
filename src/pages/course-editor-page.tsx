@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { DraftPhoto, PointConfig } from '@repo/shared-types';
+import type { DraftPhoto, PointConfig } from '../types.js';
 import { PhotoImporter } from '../components/photo-importer/photo-importer.js';
 import { CourseMapEditor } from '../components/course-map-editor/course-map-editor.js';
 import { PointEditor } from '../components/point-editor/point-editor.js';

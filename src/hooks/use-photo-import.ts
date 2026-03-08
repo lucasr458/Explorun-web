@@ -1,12 +1,12 @@
 import exifr from 'exifr';
 import { useState } from 'react';
 import { deleteUpload, uploadPhotos } from '../services/api.js';
-import type { DraftPhoto, PhotoImportSummary } from '@repo/shared-types';
+import type { DraftPhoto, PhotoImportSummary } from '../types.js';
 
 async function extractGps(file: File): Promise<{ lat: number; lng: number } | null> {
   try {
     const gps = await exifr.gps(file);
-    if (gps && typeof gps.latitude === 'number' && typeof gps.longitude === 'number') {
+    if (gps && Number.isFinite(gps.latitude) && Number.isFinite(gps.longitude)) {
       return { lat: gps.latitude, lng: gps.longitude };
     }
     return null;

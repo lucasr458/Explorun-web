@@ -1,7 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useRef, useEffect } from 'react';
-import type { DraftPhoto, PointConfig } from '@repo/shared-types';
+import type { DraftPhoto, PointConfig } from '../../types.js';
 
 interface Props {
   draftPhotos: DraftPhoto[];

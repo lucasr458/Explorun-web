@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import type { DraftPhoto, PointConfig } from '@repo/shared-types';
+import type { DraftPhoto, PointConfig } from '../../types.js';
 import { uploadPhotos, getApiUrl } from '../../services/api.js';
 
 interface Props {

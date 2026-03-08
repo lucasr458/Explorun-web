@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Course } from '@repo/shared-types';
+import type { Course } from '../types.js';
 import { getCourses, deleteCourse } from '../services/api.js';
 
 export function CoursesListPage() {

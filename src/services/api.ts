@@ -1,3 +1,5 @@
+import type { ApiResponse, Course, CourseWithPoints, PublishCourseRequest, UploadResponse } from '../types.js';
+
 const API_URL = import.meta.env['VITE_API_URL'] as string ?? 'http://localhost:3001';
 
 export function getApiUrl(): string {
@@ -48,7 +50,7 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
   return json as T;
 }
 
-export async function uploadPhotos(files: File[]): Promise<import('@repo/shared-types').ApiResponse<import('@repo/shared-types').UploadResponse>> {
+export async function uploadPhotos(files: File[]): Promise<ApiResponse<UploadResponse>> {
   const token = getAuthToken();
   const formData = new FormData();
   for (const file of files) {
@@ -78,7 +80,7 @@ export async function uploadPhotos(files: File[]): Promise<import('@repo/shared-
     throw new Error(errorJson.error?.message ?? 'Upload error');
   }
 
-  return json as import('@repo/shared-types').ApiResponse<import('@repo/shared-types').UploadResponse>;
+  return json as ApiResponse<UploadResponse>;
 }
 
 export async function deleteUpload(filename: string): Promise<void> {
@@ -87,11 +89,9 @@ export async function deleteUpload(filename: string): Promise<void> {
 
 export async function login(user: string, password: string): Promise<void> {
   const token = btoa(`${user}:${password}`);
-  const tempToken = token;
 
-  // Test credentials against the health check with auth
-  const res = await fetch(`${API_URL}/api/courses`, {
-    headers: { Authorization: `Basic ${tempToken}` },
+  const res = await fetch(`${API_URL}/api/auth/check`, {
+    headers: { Authorization: `Basic ${token}` },
   });
 
   if (res.status === 401) {
@@ -101,19 +101,19 @@ export async function login(user: string, password: string): Promise<void> {
   setAuthToken(token);
 }
 
-export async function getCourses(): Promise<import('@repo/shared-types').ApiResponse<import('@repo/shared-types').Course[]>> {
-  return fetchApi<import('@repo/shared-types').ApiResponse<import('@repo/shared-types').Course[]>>('/api/courses');
+export async function getCourses(): Promise<ApiResponse<Course[]>> {
+  return fetchApi<ApiResponse<Course[]>>('/api/courses');
 }
 
-export async function getCourse(courseId: string): Promise<import('@repo/shared-types').ApiResponse<import('@repo/shared-types').CourseWithPoints>> {
-  return fetchApi<import('@repo/shared-types').ApiResponse<import('@repo/shared-types').CourseWithPoints>>(`/api/courses/${encodeURIComponent(courseId)}`);
+export async function getCourse(courseId: string): Promise<ApiResponse<CourseWithPoints>> {
+  return fetchApi<ApiResponse<CourseWithPoints>>(`/api/courses/${encodeURIComponent(courseId)}`);
 }
 
 export async function updateCourse(
   courseId: string,
-  request: import('@repo/shared-types').PublishCourseRequest
-): Promise<import('@repo/shared-types').ApiResponse<{ courseId: string; pointCount: number }>> {
-  return fetchApi<import('@repo/shared-types').ApiResponse<{ courseId: string; pointCount: number }>>(
+  request: PublishCourseRequest
+): Promise<ApiResponse<{ courseId: string; pointCount: number }>> {
+  return fetchApi<ApiResponse<{ courseId: string; pointCount: number }>>(
     `/api/courses/${encodeURIComponent(courseId)}`,
     { method: 'PUT', body: JSON.stringify(request) }
   );
@@ -124,9 +124,9 @@ export async function deleteCourse(courseId: string): Promise<void> {
 }
 
 export async function publishCourse(
-  request: import('@repo/shared-types').PublishCourseRequest
-): Promise<import('@repo/shared-types').ApiResponse<{ courseId: string; pointCount: number }>> {
-  return fetchApi<import('@repo/shared-types').ApiResponse<{ courseId: string; pointCount: number }>>(
+  request: PublishCourseRequest
+): Promise<ApiResponse<{ courseId: string; pointCount: number }>> {
+  return fetchApi<ApiResponse<{ courseId: string; pointCount: number }>>(
     '/api/courses',
     {
       method: 'POST',

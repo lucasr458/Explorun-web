@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { DraftPhoto, PointConfig, PublishPointPayload } from '@repo/shared-types';
+import type { DraftPhoto, PointConfig, PublishPointPayload } from '../../types.js';
 import { publishCourse, updateCourse } from '../../services/api.js';
 
 interface Props {

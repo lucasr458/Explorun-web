@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import type { DraftPhoto, PhotoImportSummary } from '@repo/shared-types';
+import type { DraftPhoto, PhotoImportSummary } from '../../types.js';
 import { usePhotoImport } from '../../hooks/use-photo-import.js';
 
 interface PhotoImporterProps {
