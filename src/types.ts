@@ -46,9 +46,10 @@ export interface UploadResponse {
 // Draft photo (client-side state before publishing)
 export interface DraftPhoto {
   tempId: string;
+  file?: File; // Optional for existing photos loaded from server
   filename: string;
   originalName: string;
-  serverPath: string;
+  //serverPath: string;
   previewUrl: string;
   hasGps: boolean;
   lat?: number;
@@ -69,6 +70,7 @@ export interface PointConfig {
   hintText: string | null;
   hintPhotoSource: 'reference' | 'custom' | null;
   hintPhotoFilename: string | null;
+  hintPhotoFile?: File; // Local file for custom hint photos
 }
 
 // Publish payload

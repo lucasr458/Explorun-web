@@ -4,6 +4,7 @@ import { usePhotoImport } from '../../hooks/use-photo-import.js';
 
 interface PhotoImporterProps {
   onPhotosImported: (photos: DraftPhoto[]) => void;
+  onPhotoRemoved?: (tempId: string) => void;
   initialPhotos?: DraftPhoto[];
 }
 
@@ -69,18 +70,13 @@ function SummaryBar({ summary }: { summary: PhotoImportSummary }) {
   );
 }
 
-export function PhotoImporter({ onPhotosImported, initialPhotos }: PhotoImporterProps) {
+export function PhotoImporter({ onPhotosImported, onPhotoRemoved, initialPhotos }: PhotoImporterProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { photos, summary, isProcessing, processPhotos, removePhoto } = usePhotoImport(initialPhotos);
 
-  useEffect(() => {
-    if (initialPhotos && initialPhotos.length > 0) {
-      onPhotosImported(initialPhotos);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Remove the initial call to onPhotosImported since initial photos are handled in course-editor-page.tsx
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -98,8 +94,8 @@ export function PhotoImporter({ onPhotosImported, initialPhotos }: PhotoImporter
   }
 
   async function handleRemove(tempId: string) {
-    const updated = await removePhoto(tempId);
-    onPhotosImported(updated);
+    await removePhoto(tempId);
+    onPhotoRemoved?.(tempId);
   }
 
   function handleDragOver(e: React.DragEvent) {

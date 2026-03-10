@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { DraftPhoto, PointConfig } from '../../types.js';
-import { uploadPhotos, getApiUrl } from '../../services/api.js';
+import { getApiUrl } from '../../services/api.js';
 
 interface Props {
   draftPhotos: DraftPhoto[];
@@ -16,7 +16,6 @@ export function PointEditor({ draftPhotos, pointConfigs, selectedTempId, onConfi
   const selectedPhoto = photosWithGps.find(p => p.tempId === selectedTempId) ?? null;
   const selectedConfig = selectedTempId ? (pointConfigs[selectedTempId] ?? null) : null;
 
-  const [isUploadingHint, setIsUploadingHint] = useState(false);
   const hintFileInputRef = useRef<HTMLInputElement>(null);
 
   function updateConfig(partial: Partial<PointConfig>): void {
@@ -32,22 +31,21 @@ export function PointEditor({ draftPhotos, pointConfigs, selectedTempId, onConfi
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file || !selectedTempId) return;
-    setIsUploadingHint(true);
-    try {
-      const result = await uploadPhotos([file]);
-      const uploaded = result.data.files[0];
-      if (uploaded) {
-        updateConfig({ hintPhotoSource: 'custom', hintPhotoFilename: uploaded.filename });
-      }
-    } finally {
-      setIsUploadingHint(false);
-    }
+
+    // Keep the file local instead of uploading immediately
+    updateConfig({
+      hintPhotoSource: 'custom',
+      hintPhotoFilename: null,
+      hintPhotoFile: file
+    });
   }
 
   const customHintPreviewUrl =
-    selectedConfig?.hintPhotoSource === 'custom' && selectedConfig.hintPhotoFilename
-      ? `${getApiUrl()}/uploads/${selectedConfig.hintPhotoFilename}`
-      : null;
+    selectedConfig?.hintPhotoSource === 'custom' && selectedConfig.hintPhotoFile
+      ? URL.createObjectURL(selectedConfig.hintPhotoFile)
+      : selectedConfig?.hintPhotoSource === 'custom' && selectedConfig.hintPhotoFilename
+        ? `${getApiUrl()}/uploads/${selectedConfig.hintPhotoFilename}`
+        : null;
 
   return (
     <div className="flex flex-col h-full bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -84,13 +82,12 @@ export function PointEditor({ draftPhotos, pointConfigs, selectedTempId, onConfi
                 <button
                   key={team}
                   onClick={() => updateConfig({ teamAssignment: selectedConfig?.teamAssignment === team ? null : team })}
-                  className={`flex-1 py-1.5 text-xs font-medium rounded border transition-colors ${
-                    selectedConfig?.teamAssignment === team
+                  className={`flex-1 py-1.5 text-xs font-medium rounded border transition-colors ${selectedConfig?.teamAssignment === team
                       ? team === 'team1' ? 'bg-blue-600 border-blue-600 text-white'
                         : team === 'team2' ? 'bg-red-600 border-red-600 text-white'
-                        : 'bg-green-600 border-green-600 text-white'
+                          : 'bg-green-600 border-green-600 text-white'
                       : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   {team === 'team1' ? 'Équipe 1' : team === 'team2' ? 'Équipe 2' : 'Les deux'}
                 </button>
@@ -169,13 +166,7 @@ export function PointEditor({ draftPhotos, pointConfigs, selectedTempId, onConfi
 
                 {selectedConfig?.hintPhotoSource === 'custom' && (
                   <div>
-                    {isUploadingHint && (
-                      <div className="flex items-center gap-2 py-2">
-                        <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-xs text-gray-500">Envoi en cours…</span>
-                      </div>
-                    )}
-                    {!isUploadingHint && customHintPreviewUrl && (
+                    {customHintPreviewUrl && (
                       <div className="relative">
                         <img
                           src={customHintPreviewUrl}
@@ -183,14 +174,20 @@ export function PointEditor({ draftPhotos, pointConfigs, selectedTempId, onConfi
                           className="w-full h-28 object-contain rounded border border-gray-200 bg-gray-50"
                         />
                         <button
-                          onClick={() => updateConfig({ hintPhotoFilename: null })}
+                          onClick={() => {
+                            // Clean up blob URL if it exists
+                            if (selectedConfig.hintPhotoFile && customHintPreviewUrl?.startsWith('blob:')) {
+                              URL.revokeObjectURL(customHintPreviewUrl);
+                            }
+                            updateConfig({ hintPhotoFilename: null, hintPhotoFile: undefined })
+                          }}
                           className="absolute top-1 right-1 bg-white rounded-full px-1 text-xs text-gray-500 hover:text-red-500 shadow"
                         >
                           ✕
                         </button>
                       </div>
                     )}
-                    {!isUploadingHint && !customHintPreviewUrl && (
+                    {!customHintPreviewUrl && (
                       <button
                         onClick={() => hintFileInputRef.current?.click()}
                         className="w-full py-2 border border-dashed border-gray-300 rounded text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"

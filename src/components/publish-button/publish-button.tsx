@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import imageCompression from 'browser-image-compression';
 import type { DraftPhoto, PointConfig, PublishPointPayload } from '../../types.js';
-import { publishCourse, updateCourse } from '../../services/api.js';
+import { publishCourse, updateCourse, uploadPhotos } from '../../services/api.js';
 
 interface Props {
   draftPhotos: DraftPhoto[];
@@ -22,6 +23,46 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
   const [error, setError] = useState<string | null>(null);
   const [publishedCourseId, setPublishedCourseId] = useState<string | null>(null);
 
+  async function compressHintPhoto(file: File): Promise<File> {
+    const options = {
+      maxSizeMB: 0.5, // Smaller size for hint photos
+      maxWidthOrHeight: 1280,
+      useWebWorker: true,
+      fileType: 'image/webp' as const,
+    };
+
+    try {
+      const compressedFile = await imageCompression(file, options);
+      return new File([compressedFile], file.name.replace(/\.[^.]+$/, '.webp'), {
+        type: 'image/webp',
+        lastModified: Date.now(),
+      });
+    } catch (error) {
+      console.warn('Hint photo compression failed, using original file:', error);
+      return file;
+    }
+  }
+
+  async function compressReferencePhoto(file: File): Promise<File> {
+    const options = {
+      maxSizeMB: 0.8, // Maximum size in MB for reference photos
+      maxWidthOrHeight: 1600, // Maximum width or height
+      useWebWorker: true,
+      fileType: 'image/webp' as const,
+    };
+
+    try {
+      const compressedFile = await imageCompression(file, options);
+      return new File([compressedFile], file.name.replace(/\.[^.]+$/, '.webp'), {
+        type: 'image/webp',
+        lastModified: Date.now(),
+      });
+    } catch (error) {
+      console.warn('Reference photo compression failed, using original file:', error);
+      return file;
+    }
+  }
+
   function getIncompletePoints(): DraftPhoto[] {
     return draftPhotos.filter(photo => {
       if (!photo.hasGps) return false;
@@ -30,19 +71,26 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
     });
   }
 
-  function buildPayload(): PublishPointPayload[] {
+  function buildPayload(uploadedFiles: { filename: string; tempId: string; type: 'reference' | 'hint' }[]): PublishPointPayload[] {
     return draftPhotos
       .filter(photo => photo.hasGps && photo.lat !== undefined && photo.lng !== undefined)
       .map(photo => {
         const config = pointConfigs[photo.tempId]!;
+        // Find the uploaded filename for this photo, or use existing filename
+        const referenceUpload = uploadedFiles.find(f => f.tempId === photo.tempId && f.type === 'reference');
+        const referencePhotoPath = referenceUpload?.filename ?? photo.filename;
+
         let hintPhotoPath: string | null = null;
         if (config.hintPhotoSource === 'reference') {
-          hintPhotoPath = photo.filename;
-        } else if (config.hintPhotoSource === 'custom' && config.hintPhotoFilename) {
-          hintPhotoPath = config.hintPhotoFilename;
+          hintPhotoPath = referencePhotoPath;
+        } else if (config.hintPhotoSource === 'custom') {
+          // Find the uploaded hint photo filename, or use existing filename
+          const hintUpload = uploadedFiles.find(f => f.tempId === photo.tempId && f.type === 'hint');
+          hintPhotoPath = hintUpload?.filename ?? config.hintPhotoFilename ?? null;
         }
+
         return {
-          referencePhotoPath: photo.filename,
+          referencePhotoPath,
           hintPhotoPath,
           hintText: config.hintText ?? null,
           pointOrder: config.pointOrder!,
@@ -70,7 +118,57 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
     setError(null);
     setIsPublishing(true);
     try {
-      const payload = { name: courseName.trim(), points: buildPayload(), startPoint };
+      // Collect all files to upload: reference photos + hint photos
+      const filesToUpload: File[] = [];
+      const fileMappings: { tempId: string; type: 'reference' | 'hint'; originalIndex: number }[] = [];
+
+      // Add reference photos
+      draftPhotos
+        .filter(photo => photo.hasGps && photo.file)
+        .forEach((photo, index) => {
+          filesToUpload.push(photo.file!);
+          fileMappings.push({ tempId: photo.tempId, type: 'reference', originalIndex: index });
+        });
+
+      // Add hint photos
+      Object.entries(pointConfigs).forEach(([tempId, config]) => {
+        if (config.hintPhotoSource === 'custom' && config.hintPhotoFile) {
+          filesToUpload.push(config.hintPhotoFile);
+          fileMappings.push({ tempId, type: 'hint', originalIndex: filesToUpload.length - 1 });
+        }
+      });
+
+      let uploadedFiles: { filename: string; tempId: string; type: 'reference' | 'hint' }[] = [];
+
+      if (filesToUpload.length > 0) {
+        // Compress all photos before uploading
+        const processedFiles = await Promise.all(
+          filesToUpload.map(async (file, index) => {
+            const mapping = fileMappings[index];
+            if (mapping && mapping.type === 'hint') {
+              return await compressHintPhoto(file);
+            } else if (mapping && mapping.type === 'reference') {
+              return await compressReferencePhoto(file);
+            }
+            return file;
+          })
+        );
+
+        const uploadResult = await uploadPhotos(processedFiles);
+        uploadedFiles = uploadResult.data.files.map((uploadedFile: any, index: number) => ({
+          filename: uploadedFile.filename,
+          tempId: fileMappings[index]?.tempId || '',
+          type: fileMappings[index]?.type || 'reference',
+        }));
+      }
+
+      // Build payload with uploaded filenames
+      const payload = {
+        name: courseName.trim(),
+        points: buildPayload(uploadedFiles),
+        startPoint
+      };
+
       const response = isEditMode
         ? await updateCourse(courseId, payload)
         : await publishCourse(payload);

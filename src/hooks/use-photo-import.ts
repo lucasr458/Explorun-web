@@ -19,10 +19,10 @@ interface UsePhotoImportResult {
   photos: DraftPhoto[];
   summary: PhotoImportSummary;
   isProcessing: boolean;
-  /** Processes files and returns the full updated photos array */
+  /** Processes files and returns the new photos only */
   processPhotos: (files: File[]) => Promise<DraftPhoto[]>;
-  /** Removes a photo and returns the full updated photos array */
-  removePhoto: (tempId: string) => Promise<DraftPhoto[]>;
+  /** Removes a photo and returns the removed photo */
+  removePhoto: (tempId: string) => Promise<DraftPhoto | null>;
 }
 
 export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResult {
@@ -36,26 +36,21 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
   };
 
   async function processPhotos(files: File[]): Promise<DraftPhoto[]> {
-    if (files.length === 0) return photos;
+    if (files.length === 0) return [];
     setIsProcessing(true);
 
     try {
       // Extract GPS client-side in parallel (before upload for immediate feedback)
       const gpsResults = await Promise.all(files.map(extractGps));
 
-      // Upload files to server
-      const uploadResult = await uploadPhotos(files);
-      const serverFiles = uploadResult.data.files;
-
-      // Build DraftPhoto objects merging GPS + server data
+      // Build DraftPhoto objects with local files (no server upload yet, no compression yet)
       const newPhotos: DraftPhoto[] = files.map((file, i) => {
         const gps = gpsResults[i] ?? null;
-        const serverFile = serverFiles[i];
         return {
           tempId: crypto.randomUUID(),
-          filename: serverFile?.filename ?? '',
+          file,
+          filename: file.name, // Will be set properly during publish
           originalName: file.name,
-          serverPath: serverFile?.path ?? '',
           previewUrl: URL.createObjectURL(file),
           hasGps: gps !== null,
           lat: gps?.lat,
@@ -65,33 +60,32 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
       });
 
       setPhotos((prev) => [...prev, ...newPhotos]);
-      // Return the merged array using current snapshot + newPhotos
-      return [...photos, ...newPhotos];
+      // Return only the new photos
+      return newPhotos;
     } finally {
       setIsProcessing(false);
     }
   }
 
-  async function removePhoto(tempId: string): Promise<DraftPhoto[]> {
+  async function removePhoto(tempId: string): Promise<DraftPhoto | null> {
     const photo = photos.find((p) => p.tempId === tempId);
 
     if (photo) {
       if (photo.previewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(photo.previewUrl);
-        // Only delete from server if this was a newly uploaded file (blob URL = just uploaded)
-        if (photo.filename) {
-          try {
-            await deleteUpload(photo.filename);
-          } catch {
-            // Non-blocking: proceed with local removal even if server fails
-          }
+        // No server deletion needed for local photos - they haven't been uploaded yet
+      } else {
+        // For photos loaded from existing courses, we might need to handle deletion differently
+        // but for now, just revoke the object URL if it exists
+        if (photo.previewUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(photo.previewUrl);
         }
       }
     }
 
     const updated = photos.filter((p) => p.tempId !== tempId);
     setPhotos(updated);
-    return updated;
+    return photo || null; // Return the removed photo
   }
 
   return { photos, summary, isProcessing, processPhotos, removePhoto };

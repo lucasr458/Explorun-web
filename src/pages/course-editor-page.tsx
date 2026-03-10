@@ -18,7 +18,7 @@ export function CourseEditorPage() {
   const [placingPhotoId, setPlacingPhotoId] = useState<string | null>(null);
   const [placingStartPoint, setPlacingStartPoint] = useState(false);
   const [startPoint, setStartPoint] = useState<{ lat: number; lng: number } | null>(null);
-  const [positionHistory, setPositionHistory] = useState<Array<{tempId: string; lat?: number; lng?: number; hasGps: boolean; warning?: string}[]>>([]);
+  const [positionHistory, setPositionHistory] = useState<Array<{ tempId: string; lat?: number; lng?: number; hasGps: boolean; warning?: string }[]>>([]);
   const [initialPhotos, setInitialPhotos] = useState<DraftPhoto[] | undefined>(undefined);
   const [initialCourseName, setInitialCourseName] = useState<string | undefined>(undefined);
   const [loadingCourse, setLoadingCourse] = useState(isEditMode);
@@ -39,7 +39,6 @@ export function CourseEditorPage() {
           tempId,
           filename: point.referencePhotoPath,
           originalName: point.referencePhotoPath,
-          serverPath: `/uploads/${point.referencePhotoPath}`,
           previewUrl: `${getApiUrl()}/uploads/${point.referencePhotoPath}`,
           hasGps: true,
           lat: point.lat,
@@ -75,20 +74,21 @@ export function CourseEditorPage() {
     }).catch(() => setLoadingCourse(false));
   }, [courseId]);
 
-  function handlePhotosImported(photos: DraftPhoto[]) {
-    setDraftPhotos(photos);
+  function handlePhotosImported(newPhotos: DraftPhoto[]) {
+    setDraftPhotos(prev => [...prev, ...newPhotos]);
+  }
+
+  function handlePhotoRemoved(tempId: string) {
+    setDraftPhotos(prev => prev.filter(p => p.tempId !== tempId));
   }
 
   async function handleRemovePhoto(tempId: string): Promise<void> {
     const photo = draftPhotos.find(p => p.tempId === tempId);
     if (!photo) return;
-    // Only delete from server if it was freshly uploaded (blob URL)
+    // Photos are now kept local until publishing, so no server deletion needed
+    // Just revoke the blob URL
     if (photo.previewUrl.startsWith('blob:')) {
-      try {
-        await deleteUpload(photo.filename);
-      } catch {
-        console.warn('Failed to delete photo from server', { filename: photo.filename });
-      }
+      URL.revokeObjectURL(photo.previewUrl);
     }
     setDraftPhotos(prev => prev.filter(p => p.tempId !== tempId));
     if (selectedTempId === tempId) setSelectedTempId(null);
@@ -102,7 +102,7 @@ export function CourseEditorPage() {
     setSelectedTempId(tempId);
   }
 
-  function snapshotPositions(): {tempId: string; lat?: number; lng?: number; hasGps: boolean; warning?: string}[] {
+  function snapshotPositions(): { tempId: string; lat?: number; lng?: number; hasGps: boolean; warning?: string }[] {
     return draftPhotos.map(p => ({ tempId: p.tempId, lat: p.lat, lng: p.lng, hasGps: p.hasGps, warning: p.warning }));
   }
 
@@ -153,7 +153,7 @@ export function CourseEditorPage() {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [positionHistory, draftPhotos]);
 
   function handlePublished(_courseId: string): void {
@@ -197,6 +197,7 @@ export function CourseEditorPage() {
 
         <PhotoImporter
           onPhotosImported={handlePhotosImported}
+          onPhotoRemoved={handlePhotoRemoved}
           initialPhotos={initialPhotos}
         />
 
@@ -221,11 +222,10 @@ export function CourseEditorPage() {
                       <button
                         type="button"
                         onClick={() => setPlacingPhotoId(placingPhotoId === photo.tempId ? null : photo.tempId)}
-                        className={`text-xs px-2 py-0.5 rounded font-medium ${
-                          placingPhotoId === photo.tempId
+                        className={`text-xs px-2 py-0.5 rounded font-medium ${placingPhotoId === photo.tempId
                             ? 'bg-amber-500 text-white'
                             : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                        }`}
+                          }`}
                       >
                         {placingPhotoId === photo.tempId ? 'Annuler' : 'Positionner'}
                       </button>
@@ -257,13 +257,12 @@ export function CourseEditorPage() {
                 <button
                   type="button"
                   onClick={() => { setPlacingStartPoint(p => !p); setPlacingPhotoId(null); }}
-                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-                    placingStartPoint
+                  className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border font-medium transition-colors ${placingStartPoint
                       ? 'bg-green-600 border-green-600 text-white'
                       : startPoint
                         ? 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100'
                         : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
+                    }`}
                   title="Placer le point de départ sur la carte"
                 >
                   <span style={{ display: 'inline-block', width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderBottom: `12px solid ${placingStartPoint ? 'white' : '#16A34A'}` }} />
