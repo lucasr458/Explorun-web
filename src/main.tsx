@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { CoursesListPage } from './pages/courses-list-page';
 import { CourseEditorPage } from './pages/course-editor-page';
+import { SessionDetailPage } from './pages/session-detail-page';
 import { LoginPage } from './pages/login-page';
 import { isAuthenticated } from './services/api';
 import './styles/tailwind.css';
@@ -43,6 +44,14 @@ createRoot(rootEl).render(
           element={
             <RequireAuth>
               <CourseEditorPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/sessions/:code"
+          element={
+            <RequireAuth>
+              <SessionDetailPage />
             </RequireAuth>
           }
         />

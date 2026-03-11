@@ -1,4 +1,4 @@
-import type { ApiResponse, Course, CourseWithPoints, PublishCourseRequest, UploadResponse } from '../types.js';
+import type { ActiveSession, ApiResponse, Course, CourseWithPoints, PublishCourseRequest, SessionPlayer, SessionState, UploadResponse } from '../types.js';
 
 const API_URL = import.meta.env['VITE_API_URL'] as string ?? 'http://localhost:3001';
 
@@ -133,6 +133,22 @@ export async function publishCourse(
       body: JSON.stringify(request),
     }
   );
+}
+
+export async function getActiveSessions(): Promise<ApiResponse<ActiveSession[]>> {
+  return fetchApi<ApiResponse<ActiveSession[]>>('/api/sessions');
+}
+
+export async function deleteAllActiveSessions(): Promise<ApiResponse<{ deleted: number }>> {
+  return fetchApi<ApiResponse<{ deleted: number }>>('/api/sessions', { method: 'DELETE' });
+}
+
+export async function getSessionState(code: string): Promise<ApiResponse<SessionState>> {
+  return fetchApi<ApiResponse<SessionState>>(`/api/sessions/${encodeURIComponent(code)}`);
+}
+
+export async function getSessionPlayers(code: string): Promise<ApiResponse<SessionPlayer[]>> {
+  return fetchApi<ApiResponse<SessionPlayer[]>>(`/api/sessions/${encodeURIComponent(code)}/players`);
 }
 
 export { fetchApi };

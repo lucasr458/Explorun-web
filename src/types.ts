@@ -31,6 +31,42 @@ export interface CourseWithPoints {
   points: CoursePoint[];
 }
 
+// Sessions
+export interface ActiveSession {
+  sessionCode: string;
+  status: 'waiting' | 'active';
+  courseName: string;
+  players: Array<{ playerName: string | null; team: string }>;
+}
+
+export interface SessionPoint {
+  id: string;
+  pointOrder: number;
+  teamAssignment: 'team1' | 'team2' | 'both';
+  lat: number;
+  lng: number;
+  hintText: string | null;
+  hintPhotoPath: string | null;
+}
+
+export interface SessionState {
+  sessionCode: string;
+  status: string;
+  courseId: string;
+  courseName: string;
+  startLocation: { lat: number; lng: number } | null;
+  points: SessionPoint[];
+  teamProgress: { team1: string[]; team2: string[] };
+}
+
+export interface SessionPlayer {
+  id: string;
+  playerName: string | null;
+  team: string;
+  role: string;
+  joinedAt: string;
+}
+
 // Upload
 export interface UploadedFile {
   tempId: string;

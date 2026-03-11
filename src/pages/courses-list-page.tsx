@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Course } from '../types.js';
-import { getCourses, deleteCourse } from '../services/api.js';
+import type { ActiveSession, Course } from '../types.js';
+import { getCourses, deleteCourse, getActiveSessions, deleteAllActiveSessions } from '../services/api.js';
 
 export function CoursesListPage() {
   const navigate = useNavigate();
@@ -9,13 +9,34 @@ export function CoursesListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ActiveSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [deletingSessions, setDeletingSessions] = useState(false);
 
   useEffect(() => {
     getCourses()
       .then(res => setCourses(res.data))
       .catch(err => setError(err instanceof Error ? err.message : 'Erreur de chargement'))
       .finally(() => setLoading(false));
+
+    getActiveSessions()
+      .then(res => setSessions(res.data))
+      .catch(() => setSessions([]))
+      .finally(() => setSessionsLoading(false));
   }, []);
+
+  async function handleDeleteAllSessions() {
+    if (!confirm(`Supprimer toutes les sessions en cours (${sessions.length}) ?`)) return;
+    setDeletingSessions(true);
+    try {
+      await deleteAllActiveSessions();
+      setSessions([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
+    } finally {
+      setDeletingSessions(false);
+    }
+  }
 
   async function handleDelete(course: Course) {
     if (!confirm(`Supprimer la course "${course.name}" ?`)) return;
@@ -84,6 +105,89 @@ export function CoursesListPage() {
             ))}
           </ul>
         )}
+
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">Sessions en cours</h2>
+            {sessions.length > 0 && (
+              <button
+                onClick={() => void handleDeleteAllSessions()}
+                disabled={deletingSessions}
+                className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 border border-red-200 rounded-md disabled:opacity-50 transition-colors"
+              >
+                {deletingSessions ? '…' : `Supprimer toutes (${sessions.length})`}
+              </button>
+            )}
+          </div>
+
+          {sessionsLoading && (
+            <p className="text-gray-500 text-sm">Chargement…</p>
+          )}
+
+          {!sessionsLoading && sessions.length === 0 && (
+            <p className="text-gray-500 text-sm">Aucune session active pour l'instant.</p>
+          )}
+
+          {!sessionsLoading && sessions.length > 0 && (
+            <ul className="space-y-3">
+              {sessions.map(session => {
+                const team1 = session.players.filter(p => p.team === 'team1');
+                const team2 = session.players.filter(p => p.team === 'team2');
+                return (
+                  <li
+                    key={session.sessionCode}
+                    className="p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 hover:bg-gray-50 transition-colors"
+                    onClick={() => navigate(`/sessions/${session.sessionCode}`)}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-mono font-bold text-base text-gray-900 tracking-widest">
+                        {session.sessionCode}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        session.status === 'active'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {session.status === 'active' ? 'En cours' : 'Lobby'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-3">{session.courseName}</p>
+                    <div className="flex gap-4 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-blue-600 mb-1">Équipe 1</p>
+                        {team1.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {team1.map((p, i) => (
+                              <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                {p.playerName ?? 'Anonyme'}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400">Aucun joueur</p>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-orange-600 mb-1">Équipe 2</p>
+                        {team2.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {team2.map((p, i) => (
+                              <span key={i} className="text-xs bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full">
+                                {p.playerName ?? 'Anonyme'}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400">Aucun joueur</p>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
