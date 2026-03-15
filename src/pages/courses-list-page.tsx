@@ -56,12 +56,20 @@ export function CoursesListPage() {
       <div className="max-w-4xl mx-auto px-8 py-10">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-semibold text-gray-900">Mes parcours</h1>
-          <button
-            onClick={() => navigate('/courses/new')}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md text-sm transition-colors"
-          >
-            Créer une course
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate('/ai-test')}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md text-sm transition-colors"
+            >
+              Tester IA
+            </button>
+            <button
+              onClick={() => navigate('/courses/new')}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md text-sm transition-colors"
+            >
+              Créer une course
+            </button>
+          </div>
         </div>
 
         {loading && (

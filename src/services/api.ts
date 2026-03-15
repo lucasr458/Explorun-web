@@ -151,4 +151,48 @@ export async function getSessionPlayers(code: string): Promise<ApiResponse<Sessi
   return fetchApi<ApiResponse<SessionPlayer[]>>(`/api/sessions/${encodeURIComponent(code)}/players`);
 }
 
+export interface AiTestResult {
+  confidence: number;
+  threshold: number;
+  success: boolean;
+  error?: string;
+}
+
+export async function getAiThreshold(): Promise<ApiResponse<{ threshold: number }>> {
+  return fetchApi<ApiResponse<{ threshold: number }>>('/api/ai/threshold');
+}
+
+export async function setAiThreshold(threshold: number): Promise<ApiResponse<{ threshold: number }>> {
+  return fetchApi<ApiResponse<{ threshold: number }>>('/api/ai/threshold', {
+    method: 'PUT',
+    body: JSON.stringify({ threshold }),
+  });
+}
+
+export async function testAiComparison(photo1: File, photo2: File): Promise<ApiResponse<AiTestResult>> {
+  const token = sessionStorage.getItem('auth_token');
+  const formData = new FormData();
+  formData.append('photo1', photo1);
+  formData.append('photo2', photo2);
+
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Basic ${token}`;
+
+  const res = await fetch(`${API_URL}/api/ai/test`, { method: 'POST', headers, body: formData });
+
+  if (res.status === 401) {
+    clearAuthToken();
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  const json = await res.json() as unknown;
+  if (!res.ok) {
+    const errorJson = json as { error?: { message?: string } };
+    throw new Error(errorJson.error?.message ?? 'API error');
+  }
+
+  return json as ApiResponse<AiTestResult>;
+}
+
 export { fetchApi };

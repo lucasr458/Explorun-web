@@ -5,6 +5,7 @@ import { CoursesListPage } from './pages/courses-list-page';
 import { CourseEditorPage } from './pages/course-editor-page';
 import { SessionDetailPage } from './pages/session-detail-page';
 import { LoginPage } from './pages/login-page';
+import { AiTestPage } from './pages/ai-test-page';
 import { isAuthenticated } from './services/api';
 import './styles/tailwind.css';
 
@@ -52,6 +53,14 @@ createRoot(rootEl).render(
           element={
             <RequireAuth>
               <SessionDetailPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/ai-test"
+          element={
+            <RequireAuth>
+              <AiTestPage />
             </RequireAuth>
           }
         />
