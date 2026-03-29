@@ -1,4 +1,5 @@
 import exifr from 'exifr';
+import heic2any from 'heic2any';
 import { useState } from 'react';
 import type { DraftPhoto, PhotoImportSummary } from '../types.js';
 
@@ -15,10 +16,10 @@ async function extractGps(file: File): Promise<{ lat: number; lng: number } | nu
 }
 
 /**
- * Crée une URL de prévisualisation affichable dans tous les navigateurs.
- * Pour les fichiers HEIC/HEIF (iPhone), tente une conversion JPEG via Canvas.
- * Si le navigateur ne supporte pas HEIC (Chrome sur Windows/Android),
- * retourne quand même le blob URL d'origine — l'img onError prendra le relais.
+ * Crée une URL de prévisualisation JPEG pour tout format d'image.
+ * - HEIC/HEIF sur Safari/iOS : conversion via Canvas (natif, rapide)
+ * - HEIC/HEIF sur Chrome/Firefox : conversion via heic2any (décodeur WASM)
+ * - Autres formats : blob URL direct
  */
 async function createPreviewUrl(file: File): Promise<string> {
   const isHeic =
@@ -27,16 +28,15 @@ async function createPreviewUrl(file: File): Promise<string> {
     (file.type === '' && /\.(heic|heif)$/i.test(file.name));
 
   if (isHeic) {
+    // 1er essai : Canvas (Safari/iOS supporte HEIC nativement, très rapide)
     try {
       const bitmap = await createImageBitmap(file);
       const canvas = document.createElement('canvas');
-      // Limiter la taille de la miniature pour éviter les problèmes mémoire
       const maxDim = 1200;
       const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
       canvas.width = Math.round(bitmap.width * scale);
       canvas.height = Math.round(bitmap.height * scale);
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close();
       return await new Promise<string>((resolve, reject) => {
         canvas.toBlob(
@@ -46,10 +46,19 @@ async function createPreviewUrl(file: File): Promise<string> {
         );
       });
     } catch {
-      // Le navigateur ne sait pas décoder HEIC (Chrome sur Windows/Android)
-      // On retourne le blob URL d'origine ; l'img onError gère l'affichage
+      // Canvas ne supporte pas HEIC (Chrome, Firefox) — décodeur WASM
+    }
+
+    // 2e essai : heic2any (fonctionne dans tous les navigateurs)
+    try {
+      const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.88 });
+      const blob = Array.isArray(result) ? result[0]! : result;
+      return URL.createObjectURL(blob);
+    } catch {
+      // Décodage impossible
     }
   }
+
   return URL.createObjectURL(file);
 }
 
@@ -76,7 +85,6 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
     setIsProcessing(true);
 
     try {
-      // GPS extraction + preview URL creation en parallèle
       const [gpsResults, previewUrls] = await Promise.all([
         Promise.all(files.map(extractGps)),
         Promise.all(files.map(createPreviewUrl)),
