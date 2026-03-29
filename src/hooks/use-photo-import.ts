@@ -1,6 +1,5 @@
 import exifr from 'exifr';
 import { useState } from 'react';
-import { deleteUpload, uploadPhotos } from '../services/api.js';
 import type { DraftPhoto, PhotoImportSummary } from '../types.js';
 
 async function extractGps(file: File): Promise<{ lat: number; lng: number } | null> {
@@ -15,13 +14,50 @@ async function extractGps(file: File): Promise<{ lat: number; lng: number } | nu
   }
 }
 
+/**
+ * Crée une URL de prévisualisation affichable dans tous les navigateurs.
+ * Pour les fichiers HEIC/HEIF (iPhone), tente une conversion JPEG via Canvas.
+ * Si le navigateur ne supporte pas HEIC (Chrome sur Windows/Android),
+ * retourne quand même le blob URL d'origine — l'img onError prendra le relais.
+ */
+async function createPreviewUrl(file: File): Promise<string> {
+  const isHeic =
+    file.type === 'image/heic' ||
+    file.type === 'image/heif' ||
+    (file.type === '' && /\.(heic|heif)$/i.test(file.name));
+
+  if (isHeic) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      // Limiter la taille de la miniature pour éviter les problèmes mémoire
+      const maxDim = 1200;
+      const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+      canvas.width = Math.round(bitmap.width * scale);
+      canvas.height = Math.round(bitmap.height * scale);
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      return await new Promise<string>((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('toBlob failed'))),
+          'image/jpeg',
+          0.88,
+        );
+      });
+    } catch {
+      // Le navigateur ne sait pas décoder HEIC (Chrome sur Windows/Android)
+      // On retourne le blob URL d'origine ; l'img onError gère l'affichage
+    }
+  }
+  return URL.createObjectURL(file);
+}
+
 interface UsePhotoImportResult {
   photos: DraftPhoto[];
   summary: PhotoImportSummary;
   isProcessing: boolean;
-  /** Processes files and returns the new photos only */
   processPhotos: (files: File[]) => Promise<DraftPhoto[]>;
-  /** Removes a photo and returns the removed photo */
   removePhoto: (tempId: string) => Promise<DraftPhoto | null>;
 }
 
@@ -40,18 +76,20 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
     setIsProcessing(true);
 
     try {
-      // Extract GPS client-side in parallel (before upload for immediate feedback)
-      const gpsResults = await Promise.all(files.map(extractGps));
+      // GPS extraction + preview URL creation en parallèle
+      const [gpsResults, previewUrls] = await Promise.all([
+        Promise.all(files.map(extractGps)),
+        Promise.all(files.map(createPreviewUrl)),
+      ]);
 
-      // Build DraftPhoto objects with local files (no server upload yet, no compression yet)
       const newPhotos: DraftPhoto[] = files.map((file, i) => {
         const gps = gpsResults[i] ?? null;
         return {
           tempId: crypto.randomUUID(),
           file,
-          filename: file.name, // Will be set properly during publish
+          filename: file.name,
           originalName: file.name,
-          previewUrl: URL.createObjectURL(file),
+          previewUrl: previewUrls[i]!,
           hasGps: gps !== null,
           lat: gps?.lat,
           lng: gps?.lng,
@@ -60,7 +98,6 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
       });
 
       setPhotos((prev) => [...prev, ...newPhotos]);
-      // Return only the new photos
       return newPhotos;
     } finally {
       setIsProcessing(false);
@@ -69,23 +106,11 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
 
   async function removePhoto(tempId: string): Promise<DraftPhoto | null> {
     const photo = photos.find((p) => p.tempId === tempId);
-
-    if (photo) {
-      if (photo.previewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(photo.previewUrl);
-        // No server deletion needed for local photos - they haven't been uploaded yet
-      } else {
-        // For photos loaded from existing courses, we might need to handle deletion differently
-        // but for now, just revoke the object URL if it exists
-        if (photo.previewUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(photo.previewUrl);
-        }
-      }
+    if (photo?.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(photo.previewUrl);
     }
-
-    const updated = photos.filter((p) => p.tempId !== tempId);
-    setPhotos(updated);
-    return photo || null; // Return the removed photo
+    setPhotos(photos.filter((p) => p.tempId !== tempId));
+    return photo ?? null;
   }
 
   return { photos, summary, isProcessing, processPhotos, removePhoto };
