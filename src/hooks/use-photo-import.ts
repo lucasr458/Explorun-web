@@ -55,7 +55,7 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
           hasGps: gps !== null,
           lat: gps?.lat,
           lng: gps?.lng,
-          warning: gps === null ? `Aucune donnée GPS dans ${file.name}` : undefined,
+          warning: gps === null ? `Pas de GPS dans ${file.name} (sur iPhone : Réglages → Confidentialité → Service de localisation → Appareil photo → Lors de l'utilisation)` : undefined,
         };
       });
 

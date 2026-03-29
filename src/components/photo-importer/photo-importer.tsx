@@ -81,7 +81,8 @@ export function PhotoImporter({ onPhotosImported, onPhotoRemoved, initialPhotos 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     const fileArray = Array.from(files).filter((f) =>
-      ['image/jpeg', 'image/png', 'image/webp'].includes(f.type),
+      f.type.startsWith('image/') ||
+      /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name),
     );
     if (fileArray.length === 0) return;
     setError(null);
@@ -153,14 +154,14 @@ export function PhotoImporter({ onPhotosImported, onPhotoRemoved, initialPhotos 
             <p className="text-gray-600 text-sm font-medium">
               Glissez vos photos ici ou cliquez pour sélectionner
             </p>
-            <p className="text-gray-400 text-xs mt-1">JPEG, PNG, WEBP · max 10 Mo par photo</p>
+            <p className="text-gray-400 text-xs mt-1">JPEG, HEIC, PNG, WEBP · max 10 Mo par photo</p>
           </>
         )}
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
           onChange={handleInputChange}
           className="hidden"
         />

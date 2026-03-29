@@ -124,4 +124,5 @@ export interface PublishCourseRequest {
   name: string;
   points: PublishPointPayload[];
   startPoint: { lat: number; lng: number } | null;
+  published?: boolean; // false = brouillon, true (défaut) = publié
 }

@@ -21,6 +21,7 @@ export function CourseEditorPage() {
   const [positionHistory, setPositionHistory] = useState<Array<{ tempId: string; lat?: number; lng?: number; hasGps: boolean; warning?: string }[]>>([]);
   const [initialPhotos, setInitialPhotos] = useState<DraftPhoto[] | undefined>(undefined);
   const [initialCourseName, setInitialCourseName] = useState<string | undefined>(undefined);
+  const [isExistingDraft, setIsExistingDraft] = useState<boolean | undefined>(undefined);
   const [loadingCourse, setLoadingCourse] = useState(isEditMode);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export function CourseEditorPage() {
     getCourse(courseId).then(res => {
       const { course, points: coursePoints } = res.data;
       setInitialCourseName(course.name);
+      setIsExistingDraft(!course.published);
 
       const photos: DraftPhoto[] = [];
       const configs: Record<string, PointConfig> = {};
@@ -182,7 +184,7 @@ export function CourseEditorPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-7xl mx-auto px-8 py-10">
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:px-8 sm:py-10">
         <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => navigate('/')}
@@ -249,7 +251,7 @@ export function CourseEditorPage() {
 
         {draftPhotos.length > 0 && (
           <section className="mt-8">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <h2 className="text-lg font-semibold text-gray-900">
                 Carte des points ({draftPhotos.filter(p => p.hasGps).length} points positionnés)
               </h2>
@@ -279,8 +281,8 @@ export function CourseEditorPage() {
                 </button>
               </div>
             </div>
-            <div className="flex gap-4 items-stretch">
-              <div className="w-72 flex-shrink-0 flex flex-col">
+            <div className="flex flex-col-reverse md:flex-row gap-4">
+              <div className="w-full md:w-72 flex-shrink-0 flex flex-col">
                 <PointEditor
                   draftPhotos={draftPhotos}
                   pointConfigs={pointConfigs}
@@ -316,6 +318,7 @@ export function CourseEditorPage() {
               onPublished={handlePublished}
               courseId={courseId}
               initialCourseName={initialCourseName}
+              isDraft={isExistingDraft}
             />
           </section>
         )}

@@ -128,10 +128,26 @@ export async function publishCourse(
 ): Promise<ApiResponse<{ courseId: string; pointCount: number }>> {
   return fetchApi<ApiResponse<{ courseId: string; pointCount: number }>>(
     '/api/courses',
-    {
-      method: 'POST',
-      body: JSON.stringify(request),
-    }
+    { method: 'POST', body: JSON.stringify({ ...request, published: true }) }
+  );
+}
+
+export async function saveDraft(
+  request: PublishCourseRequest
+): Promise<ApiResponse<{ courseId: string; pointCount: number }>> {
+  return fetchApi<ApiResponse<{ courseId: string; pointCount: number }>>(
+    '/api/courses',
+    { method: 'POST', body: JSON.stringify({ ...request, published: false }) }
+  );
+}
+
+export async function updateDraft(
+  courseId: string,
+  request: PublishCourseRequest
+): Promise<ApiResponse<{ courseId: string; pointCount: number }>> {
+  return fetchApi<ApiResponse<{ courseId: string; pointCount: number }>>(
+    `/api/courses/${encodeURIComponent(courseId)}`,
+    { method: 'PUT', body: JSON.stringify({ ...request, published: false }) }
   );
 }
 

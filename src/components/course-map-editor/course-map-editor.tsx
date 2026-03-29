@@ -268,8 +268,8 @@ export function CourseMapEditor({ draftPhotos, pointConfigs, selectedTempId, sta
     <div className="flex-1 relative">
       <div
         ref={mapContainerRef}
-        className="w-full rounded-xl overflow-hidden"
-        style={{ height: '600px', filter: 'grayscale(30%) sepia(5%)' }}
+        className="w-full rounded-xl overflow-hidden h-[320px] md:h-[600px]"
+        style={{ filter: 'grayscale(30%) sepia(5%)' }}
       />
       <button
         type="button"

@@ -6,6 +6,7 @@ import { getCourses, deleteCourse, getActiveSessions, deleteAllActiveSessions } 
 export function CoursesListPage() {
   const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
+  const [drafts, setDrafts] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -15,7 +16,10 @@ export function CoursesListPage() {
 
   useEffect(() => {
     getCourses()
-      .then(res => setCourses(res.data))
+      .then(res => {
+        setCourses(res.data.filter(c => c.published));
+        setDrafts(res.data.filter(c => !c.published));
+      })
       .catch(err => setError(err instanceof Error ? err.message : 'Erreur de chargement'))
       .finally(() => setLoading(false));
 
@@ -44,6 +48,7 @@ export function CoursesListPage() {
     try {
       await deleteCourse(course.id);
       setCourses(prev => prev.filter(c => c.id !== course.id));
+      setDrafts(prev => prev.filter(c => c.id !== course.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la suppression');
     } finally {
@@ -112,6 +117,42 @@ export function CoursesListPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {!loading && drafts.length > 0 && (
+          <div className="mt-8">
+            <h2 className="text-base font-semibold text-gray-700 mb-3">Brouillons</h2>
+            <ul className="space-y-3">
+              {drafts.map(draft => (
+                <li
+                  key={draft.id}
+                  className="p-4 border border-dashed border-gray-300 rounded-lg flex items-center justify-between hover:border-gray-400 transition-colors bg-gray-50"
+                >
+                  <button
+                    className="flex-1 text-left"
+                    onClick={() => navigate(`/courses/${draft.id}/edit`)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-gray-800">{draft.name}</p>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Brouillon</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {draft.pointCount} point{draft.pointCount > 1 ? 's' : ''}
+                      {' · '}
+                      {new Date(draft.updatedAt).toLocaleDateString('fr-FR')}
+                    </p>
+                  </button>
+                  <button
+                    onClick={() => void handleDelete(draft)}
+                    disabled={deletingId === draft.id}
+                    className="ml-4 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-md disabled:opacity-50 transition-colors"
+                  >
+                    {deletingId === draft.id ? '…' : 'Supprimer'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         <div className="mt-10">

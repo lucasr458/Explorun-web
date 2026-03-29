@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import imageCompression from 'browser-image-compression';
 import type { DraftPhoto, PointConfig, PublishPointPayload } from '../../types.js';
-import { publishCourse, updateCourse, uploadPhotos } from '../../services/api.js';
+import { publishCourse, updateCourse, saveDraft, updateDraft, uploadPhotos } from '../../services/api.js';
 
 interface Props {
   draftPhotos: DraftPhoto[];
@@ -10,12 +10,15 @@ interface Props {
   onPublished: (courseId: string) => void;
   courseId?: string;        // if set → edit mode (PUT instead of POST)
   initialCourseName?: string;
+  isDraft?: boolean;        // true si la course existante est un brouillon
 }
 
-export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublished, courseId, initialCourseName }: Props) {
+export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublished, courseId, initialCourseName, isDraft }: Props) {
   const isEditMode = !!courseId;
+  const showDraftButton = !isEditMode || isDraft === true;
   const [courseName, setCourseName] = useState(initialCourseName ?? '');
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   useEffect(() => {
     if (initialCourseName) setCourseName(initialCourseName);
@@ -99,6 +102,94 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
           lng: photo.lng!,
         };
       });
+  }
+
+  function buildDraftPayload(uploadedFiles: { filename: string; tempId: string; type: 'reference' | 'hint' }[]): PublishPointPayload[] {
+    return draftPhotos
+      .filter(photo => photo.hasGps && photo.lat !== undefined && photo.lng !== undefined)
+      .map((photo, index) => {
+        const config = pointConfigs[photo.tempId] ?? null;
+        const referenceUpload = uploadedFiles.find(f => f.tempId === photo.tempId && f.type === 'reference');
+        const referencePhotoPath = referenceUpload?.filename ?? photo.filename;
+
+        let hintPhotoPath: string | null = null;
+        if (config?.hintPhotoSource === 'reference') {
+          hintPhotoPath = referencePhotoPath;
+        } else if (config?.hintPhotoSource === 'custom') {
+          const hintUpload = uploadedFiles.find(f => f.tempId === photo.tempId && f.type === 'hint');
+          hintPhotoPath = hintUpload?.filename ?? config.hintPhotoFilename ?? null;
+        }
+
+        return {
+          referencePhotoPath,
+          hintPhotoPath,
+          hintText: config?.hintText ?? null,
+          pointOrder: config?.pointOrder ?? index + 1,
+          teamAssignment: config?.teamAssignment ?? 'both',
+          lat: photo.lat!,
+          lng: photo.lng!,
+        };
+      });
+  }
+
+  async function handleSaveDraft(): Promise<void> {
+    if (!courseName.trim()) {
+      setError('Veuillez saisir un nom de parcours');
+      return;
+    }
+    setError(null);
+    setIsSavingDraft(true);
+    try {
+      const filesToUpload: File[] = [];
+      const fileMappings: { tempId: string; type: 'reference' | 'hint'; originalIndex: number }[] = [];
+
+      draftPhotos
+        .filter(photo => photo.hasGps && photo.file)
+        .forEach((photo, index) => {
+          filesToUpload.push(photo.file!);
+          fileMappings.push({ tempId: photo.tempId, type: 'reference', originalIndex: index });
+        });
+
+      Object.entries(pointConfigs).forEach(([tempId, config]) => {
+        if (config.hintPhotoSource === 'custom' && config.hintPhotoFile) {
+          filesToUpload.push(config.hintPhotoFile);
+          fileMappings.push({ tempId, type: 'hint', originalIndex: filesToUpload.length - 1 });
+        }
+      });
+
+      let uploadedFiles: { filename: string; tempId: string; type: 'reference' | 'hint' }[] = [];
+
+      if (filesToUpload.length > 0) {
+        const processedFiles = await Promise.all(
+          filesToUpload.map(async (file, index) => {
+            const mapping = fileMappings[index];
+            if (mapping?.type === 'hint') return await compressHintPhoto(file);
+            return await compressReferencePhoto(file);
+          })
+        );
+        const uploadResult = await uploadPhotos(processedFiles);
+        uploadedFiles = uploadResult.data.files.map((uploadedFile: any, index: number) => ({
+          filename: uploadedFile.filename,
+          tempId: fileMappings[index]?.tempId || '',
+          type: fileMappings[index]?.type || 'reference',
+        }));
+      }
+
+      const payload = {
+        name: courseName.trim(),
+        points: buildDraftPayload(uploadedFiles),
+        startPoint: startPoint ?? null,
+      };
+
+      const response = isEditMode
+        ? await updateDraft(courseId, payload)
+        : await saveDraft(payload);
+      onPublished(response.data.courseId);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur de sauvegarde');
+    } finally {
+      setIsSavingDraft(false);
+    }
   }
 
   async function handlePublish(): Promise<void> {
@@ -193,6 +284,8 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
     );
   }
 
+  const isBusy = isPublishing || isSavingDraft;
+
   return (
     <div className="p-4 border border-gray-200 rounded-lg">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -201,7 +294,7 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
 
       <input
         type="text"
-        placeholder="Course name..."
+        placeholder="Nom du parcours..."
         value={courseName}
         onChange={e => setCourseName(e.target.value)}
         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-3"
@@ -219,13 +312,25 @@ export function PublishButton({ draftPhotos, pointConfigs, startPoint, onPublish
         </p>
       )}
 
-      <button
-        onClick={handlePublish}
-        disabled={isPublishing || gpsPhotos.length === 0}
-        className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700"
-      >
-        {isPublishing ? 'En cours…' : isEditMode ? 'Mettre à jour' : 'Publier'}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        {showDraftButton && (
+          <button
+            onClick={() => void handleSaveDraft()}
+            disabled={isBusy || gpsPhotos.length === 0}
+            className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-200"
+          >
+            {isSavingDraft ? 'Sauvegarde…' : 'Sauvegarder brouillon'}
+          </button>
+        )}
+
+        <button
+          onClick={() => void handlePublish()}
+          disabled={isBusy || gpsPhotos.length === 0}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700"
+        >
+          {isPublishing ? 'Publication…' : isEditMode ? 'Mettre à jour' : 'Publier'}
+        </button>
+      </div>
 
       {error && (
         <p className="text-red-600 text-sm mt-2">{error}</p>
