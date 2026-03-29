@@ -60,7 +60,7 @@ export function CoursesListPage() {
     <div className="min-h-screen bg-white">
       <div className="max-w-4xl mx-auto px-8 py-10">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900">Mes parcours</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Mes parcours <span className="text-sm font-normal text-gray-400">v1.2</span></h1>
           <div className="flex items-center gap-2">
             <button
               onClick={() => navigate('/ai-test')}
