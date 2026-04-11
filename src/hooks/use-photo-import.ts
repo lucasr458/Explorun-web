@@ -15,51 +15,55 @@ async function extractGps(file: File): Promise<{ lat: number; lng: number } | nu
   }
 }
 
-/**
- * Crée une URL de prévisualisation JPEG pour tout format d'image.
- * - HEIC/HEIF sur Safari/iOS : conversion via Canvas (natif, rapide)
- * - HEIC/HEIF sur Chrome/Firefox : conversion via heic2any (décodeur WASM)
- * - Autres formats : blob URL direct
- */
-async function createPreviewUrl(file: File): Promise<string> {
-  const isHeic =
+function isHeicFile(file: File): boolean {
+  return (
     file.type === 'image/heic' ||
     file.type === 'image/heif' ||
-    (file.type === '' && /\.(heic|heif)$/i.test(file.name));
+    ((file.type === '' || file.type === 'application/octet-stream') &&
+      /\.(heic|heif)$/i.test(file.name))
+  );
+}
 
-  if (isHeic) {
-    // 1er essai : Canvas (Safari/iOS supporte HEIC nativement, très rapide)
-    try {
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement('canvas');
-      const maxDim = 1200;
-      const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-      canvas.width = Math.round(bitmap.width * scale);
-      canvas.height = Math.round(bitmap.height * scale);
-      canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      return await new Promise<string>((resolve, reject) => {
-        canvas.toBlob(
-          (blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('toBlob failed'))),
-          'image/jpeg',
-          0.88,
-        );
-      });
-    } catch {
-      // Canvas ne supporte pas HEIC (Chrome, Firefox) — décodeur WASM
-    }
-
-    // 2e essai : heic2any (fonctionne dans tous les navigateurs)
-    try {
-      const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.88 });
-      const blob = Array.isArray(result) ? result[0]! : result;
-      return URL.createObjectURL(blob);
-    } catch {
-      // Décodage impossible
-    }
+/**
+ * Convertit un fichier HEIC/HEIF en JPEG (fichier + prévisualisation).
+ * Retourne le fichier JPEG converti et son URL de prévisualisation.
+ */
+async function convertHeicToJpeg(file: File): Promise<{ file: File; previewUrl: string }> {
+  // 1er essai : Canvas (Safari/iOS supporte HEIC nativement, très rapide)
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    const maxDim = 1200;
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+        'image/jpeg',
+        0.88,
+      );
+    });
+    const jpegName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+    return { file: new File([blob], jpegName, { type: 'image/jpeg' }), previewUrl: URL.createObjectURL(blob) };
+  } catch {
+    // Canvas ne supporte pas HEIC (Chrome, Firefox) — décodeur WASM
   }
 
-  return URL.createObjectURL(file);
+  // 2e essai : heic2any (fonctionne dans tous les navigateurs)
+  const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.88 });
+  const blob = Array.isArray(result) ? result[0]! : result;
+  const jpegName = file.name.replace(/\.(heic|heif)$/i, '.jpg');
+  return { file: new File([blob], jpegName, { type: 'image/jpeg' }), previewUrl: URL.createObjectURL(blob) };
+}
+
+async function prepareFile(file: File): Promise<{ file: File; previewUrl: string }> {
+  if (isHeicFile(file)) {
+    return convertHeicToJpeg(file);
+  }
+  return { file, previewUrl: URL.createObjectURL(file) };
 }
 
 interface UsePhotoImportResult {
@@ -85,19 +89,20 @@ export function usePhotoImport(initialPhotos?: DraftPhoto[]): UsePhotoImportResu
     setIsProcessing(true);
 
     try {
-      const [gpsResults, previewUrls] = await Promise.all([
+      const [gpsResults, prepared] = await Promise.all([
         Promise.all(files.map(extractGps)),
-        Promise.all(files.map(createPreviewUrl)),
+        Promise.all(files.map(prepareFile)),
       ]);
 
       const newPhotos: DraftPhoto[] = files.map((file, i) => {
         const gps = gpsResults[i] ?? null;
+        const { file: preparedFile, previewUrl } = prepared[i]!;
         return {
           tempId: crypto.randomUUID(),
-          file,
-          filename: file.name,
+          file: preparedFile,
+          filename: preparedFile.name,
           originalName: file.name,
-          previewUrl: previewUrls[i]!,
+          previewUrl,
           hasGps: gps !== null,
           lat: gps?.lat,
           lng: gps?.lng,
